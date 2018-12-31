@@ -1,0 +1,64 @@
+node {
+   def mvnHome  
+   def server=Artifactory.server'Artifactory'
+   try{
+       stage('Preparation') {
+          git 'https://github.com/Jegapriya/EmployeeSpring.git'
+        
+          mvnHome = tool 'Maven'
+       }
+  
+	stage('SonarQube analysis') {
+		withSonarQubeEnv('Sonarqube') {
+				sh '''mvn clean package sonar:sonar \
+  					-Dsonar.host.url=http://13.90.59.213 \
+  					-Dsonar.login=31954f225bd61830fc95c60fb6ecdb37c97e73c6'''
+			}
+    }
+    
+    stage("Quality Gate") {
+			timeout(time: 1, unit: 'HOURS') { 
+				def qg = waitForQualityGate() 
+				if (qg.status != 'OK') {
+					currentBuild.status='FAILURE'
+					error "Pipeline aborted due to quality gate failure: ${qg.status}"
+					mail bcc: '', body: 'Build Failed', cc: '', from: '', replyTo: '', subject: 'Build Failed', to: 'jegapriyamunieswaran@gmail.com'
+					currentBuild.status='FAILURE'
+				}
+			}
+		}
+
+        stage('Build') {
+           sh "'${mvnHome}/bin/mvn' -Dmaven.test.failure.ignore clean package"
+       }   
+		
+    stage('Artifactory upload') {
+	      def uploadSpec = """{ "files": [ {
+		   "pattern": "/var/lib/jenkins/workspace/NewForDiscuss/target/*.war", "target": "SnapshotNew" 
+	   } ] }""" 
+	   server.upload(uploadSpec)    
+   }
+   
+   stage('downloading artifact'){ 
+	def downloadSpec="""{ "files":[ { 
+		"pattern":"target/*.war", "target":"/var/lib/jenkins/workspace/NewForDiscuss/" 
+	   } ] }"""  
+	   server.download(downloadSpec)
+   }
+
+   stage('Tomcat')
+   {
+   	//sh "docker cp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war jegapriya:/usr/local/tomcat/webapps/"
+	//sh "docker cp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war jegapriya2:/usr/local/tomcat/webapps/"
+   	sh "scp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war Jegapriya@jegapriya.eastus.cloudapp.azure.com:/opt/tomcat/apache-tomcat-8.5.37/webapps"
+	
+   }
+
+   }
+   catch(err)
+   {
+            emailext body: "${err}", subject: 'job failed', to: 'jegapriyamunieswaran@gmail.com'
+	    currentBuild.result='FAILURE'
+	    echo "RESULT:${currentBuild.result}"
+   }
+}
