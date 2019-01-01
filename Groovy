@@ -4,11 +4,11 @@ node {
    try{
        stage('Preparation') {
           git 'https://github.com/Jegapriya/EmployeeSpring.git'
-        
+           
           mvnHome = tool 'Maven'
        }
   
-	/*stage('SonarQube analysis') {
+	stage('SonarQube analysis') {
 		withSonarQubeEnv('Sonarqube') {
 				sh '''mvn clean package sonar:sonar \
   					-Dsonar.host.url=http://13.90.59.213 \
@@ -26,10 +26,10 @@ node {
 					currentBuild.status='FAILURE'
 				}
 			}
-		}*/
-
+		}
+	
         stage('Build') {
-           sh "'${mvnHome}/bin/mvn' -Dmaven.test.failure.ignore clean package"
+           sh "'${mvnHome}/bin/mvn' -Dmaven.test.failure.ignore clean packag"
        }   
 		
     stage('Artifactory upload') {
@@ -46,19 +46,45 @@ node {
 	   server.download(downloadSpec)
    }
 
-   stage('Tomcat')
-   {
-   	//sh "docker cp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war jegapriya:/usr/local/tomcat/webapps/"
-	//sh "docker cp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war jegapriya2:/usr/local/tomcat/webapps/"
-   	sh "scp /var/lib/jenkins/workspace/NewForDiscuss/target/*.war Jegapriya@jegapriya.eastus.cloudapp.azure.com:/opt/tomcat/apache-tomcat-8.5.37/webapps"
-	
-   }
 
    }
    catch(err)
    {
+    
+    	stage("New Jira"){
+    	 withEnv(['JIRA_SITE=Jira']) {
+      def testIssue = [fields: [ project: [id: 10001],
+                                 summary: 'New JIRA Created from Jenkins.',
+                                 description: 'New JIRA Created from Jenkins.',
+                                 issuetype: [name: 'Bug']]]
+
+     jiraAssignIssue site: 'Jira', idOrKey: 'NW-21', userName: 'vikas.gokhale.v'
+      response = jiraNewIssue issue: testIssue
+      echo response.successful.toString()
+      echo response.data.toString()
+    }
+   	 }
+	 
+	 stage('comment'){
+        withEnv(['JIRA_SITE=Jira']) {
+			jiraComment body: 'Build sucess', issueKey: 'NW-21'
+			jiraAssignIssue idOrKey: 'NW-21', userName: 'admin'
+		}
+    }
+    
+    /*stage('JIRA-transition') {
+      withEnv(['JIRA_SITE=Jira']) {
+        def transitionInput =
+        [
+          transition: [
+            id: '41'			  
+          ]
+        ]
+        jiraTransitionIssue idOrKey: 'NW-14', input: transitionInput
+      }
+    }
             emailext body: "${err}", subject: 'job failed', to: 'jegapriyamunieswaran@gmail.com'
-	    currentBuild.result='FAILURE'
-	    echo "RESULT:${currentBuild.result}"
-   }
+	    currentBuild.result='Failure'
+   }*/
+   
 }
